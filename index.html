@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Shower Presentation Engine</title>
+	<meta charset="utf-8">
+	<meta http-equiv="x-ua-compatible" content="ie=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="shower/themes/ribbon/styles/screen-16x10.css">
+  <style>
+    .alternative-code {
+      display: flex;
+      align-items: center;
+    }
+    .alternative-code pre {
+      flex: 1 1;
+      font-size: 20px;
+      display: inline-block !important;
+      margin: 10px;
+    }
+    .arrow {
+      flex: 0 0 auto;
+      width:  40px;
+      height: 40px;
+      margin: auto;
+    }
+    code {
+      margin: auto !important;
+      padding: 0 !important;
+      width: auto !important;
+    }
+    .small {
+      font-size: 12px;
+    }
+    .medium {
+      font-size: 16px;
+    }
+  </style>
+</head>
+
+<body class="shower list">
+  <section class="slide">
+    <h2>The Tyranny of Mocks</h2>
+  </section>
+
+
+  <section class="slide">
+    <h2>Thesis: Mocks and stubs are largely unnecessary and best avoided.</h2>
+  </section>
+
+
+  <section class="slide">
+    <h2>Tests help to prevent regressions.</h2>
+    <h2>Mocks allow you to break code without breaking the tests.</h2>
+  </section>
+
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code>
+it 'finds orders' do
+  expect(Order)
+    .to_receive(:where)
+    .and_return([double])
+  result = interactor.perform(5)
+  expect(result.length)
+    .to eq(1)
+end
+        </code>
+      </pre>
+      <pre>
+        <code>
+class FindOrders
+  def self.perform(id)
+    Order.where(id: id)
+  end
+end
+        </code>
+      </pre>
+    </div>
+  </section>
+
+
+  <section class="slide">
+    <h2>Code with lots of dependencies or tight coupling is difficult to use and test.</h2>
+    <h2>Mocks allow you sweep these difficulties under the rug. They are telling you that your design is non-modular.</h2>
+  </section>
+
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code class="small">
+it 'finds orders' do
+  expect(interactor)
+    .to_receive(:fetch)
+    .and_return(['completed', 'delivered'])
+  result = interactor.perform(5)
+  expect(result).to eq('Completed')
+end
+        </code>
+      </pre>
+      <pre>
+        <code class="small">
+class FindOrders
+  def self.perform(id)
+    fetch(id)
+      .first
+      .constantize
+  end
+
+  def self.fetch(id)
+    events = client
+      .fetch_events(id)
+    eids = events.map(&:id)
+    shipments = client
+      .fetch_shipments(eids)
+    shipments
+      .select(&:outgoing)
+      .map(&:status)
+  end
+end
+        </code>
+      </pre>
+    </div>
+  </section>
+
+
+  <section class="slide">
+    <h2>We would like to be able to change implementation details without breaking our test.</h2>
+    <h2>Mocks couple your tests directly to deep implementation details.</h2>
+  </section>
+
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code class="medium">
+it 'gets status' do
+  order = double(id: 5)
+  event = double(status: 'complete')
+  expect(Event)
+    .to_receive(:where)
+    .and_return([event])
+  expect(Order)
+    .to_receive(:find)
+    .and_return(order)
+  result = interactor.perform(5)
+  expect(result).to eq('complete')
+end
+        </code>
+      </pre>
+      <pre>
+        <code class="medium">
+class GetStatus
+  def self.perform(id)
+    order = Order.find(id)
+    events = Event
+      .where(order_id: order.id)
+    events.last.status
+  end
+end
+        </code>
+      </pre>
+    </div>
+  </section>
+
+
+  <section class="slide">
+    <h2>Pure functions are the best solution I know of</h2>
+  </section>
+
+
+  <section class="slide">
+    <h2>Test results, not behavio(u)r</h2>
+  </section>
+
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code class="medium">
+it 'caches status' do
+  order = double
+  event = double(status: 'complete')
+  expect(Event)
+    .to_receive(:where)
+    .and_return([event])
+  expect(order)
+    .to_receive(:status=)
+    .with('complete')
+  expect(order)
+    .to_receive(:save)
+  interactor.perform(order)
+end
+        </code>
+      </pre>
+      <pre>
+        <code class="medium">
+it 'caches status' do
+  order = Order.new
+  order.events << Event.new \
+    status: 'complete'
+  result = interactor
+    .perform(order)
+  expect(order.status)
+    .to eq('complete')
+end
+        </code>
+      </pre>
+    </div>
+  </section>
+
+
+  <section class="slide">
+    <h2>Use simple(r) data as inputs</h2>
+  </section>
+
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code class="small">
+it 'ok?' do
+  order = double
+  allow(order)
+    .to_receive(:due_days)
+    .and_return(2)
+  allow(order)
+    .to_receive(:count_events)
+    .and_return(3)
+  allow(order)
+    .to_receive(:status)
+    .and_return('complete')
+  result = interactor
+    .perform(order)
+  expect(result).to be true
+end
+        </code>
+      </pre>
+      <pre>
+        <code class="small">
+it 'ok?' do
+  result = interactor.perform \
+    due_days: 2,
+    events:   3,
+    status:   'complete'
+  expect(result).to be true
+end
+        </code>
+      </pre>
+    </div>
+  </section>
+
+
+  <section class="slide">
+    <h2>Isolate and Ignore</h2>
+    <p>Test with both your i's</p>
+  </section>
+
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code class="small">
+class Notify
+  def self.perform(client, id)
+    member = client.fetch(id)
+    name = member['name']
+    cutoff = Time.now - 3.days
+    if member['created_at'] < cutoff
+      subject = "Hello #{name}"
+      client.notify \
+        'reminder_email',
+        subject
+    else
+      subject = "Hello again #{name}"
+      client.notify \
+        'followup_email',
+        subject
+    end
+  end
+end
+        </code>
+      </pre>
+      <pre>
+        <code class="small">
+class Notify
+  def self.perform(client, id)
+    member = client.fetch(id)
+    notification, subject = params(member, Time.now - 3.days)
+    client.notify(notification, subject)
+  end
+
+  def self.params(member, cutoff)
+    name = member['name']
+    if member['created_at'] < cutoff
+      'reminder_email', "Hello #{name}"
+    else
+      'followup_email', "Hello again #{name}"
+    end
+  end
+end
+        </code>
+      </pre>
+    </div>
+  </section>
+
+
+  <section class="slide">
+    <h2>Make inputs deterministic</h2>
+  </section>
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code>
+def due_date
+  Time.now + 5.days
+end
+
+due_date # => 2016-03-04...
+        </code>
+      </pre>
+      <pre>
+        <code>
+def due_date(today)
+  today + 5.days
+end
+due_date(Time.at(4)) # => 2016-03-04...
+        </code>
+      </pre>
+    </div>
+  </section>
+
+
+  <section class="slide">
+    <h2>Mocks are perfect for testing error cases</h2>
+  </section>
+
+
+  <section class="slide">
+    <div class="alternative-code">
+      <pre>
+        <code class="medium">
+it 'fails gracefully' do
+  client = double
+
+  expect(client).to_receive(:fetch) do
+    raise TimeoutError.new
+  end
+
+  result = interactor
+    .perform('mbaker', client)
+
+  expect(result).to be_nil
+end
+        </code>
+      </pre>
+    </div>
+  </section>
+
+	<script src="shower/shower.min.js"></script>
+</body>
+</html>
